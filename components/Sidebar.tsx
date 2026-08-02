@@ -8,6 +8,7 @@ import {
   TrendingIcon,
   MusicIcon,
   UserIcon,
+  TrashIcon,
 } from "@/components/icons";
 
 export type View =
@@ -28,6 +29,7 @@ export default function Sidebar({ view, onChange }: Props) {
   const playlists = useLibrary((s) => s.playlists);
   const favorites = useLibrary((s) => s.favorites);
   const createPlaylist = useLibrary((s) => s.createPlaylist);
+  const deletePlaylist = useLibrary((s) => s.deletePlaylist);
 
   const user = useAuth((s) => s.user);
   const openDialog = useAuth((s) => s.openDialog);
@@ -56,6 +58,22 @@ export default function Sidebar({ view, onChange }: Props) {
 
     const playlist = await createPlaylist(name);
     if (playlist) onChange({ kind: "playlist", id: playlist.id });
+  }
+
+  async function handleDelete(playlistId: string, name: string) {
+    // Deleting takes the songs inside with it, so make it deliberate.
+    const ok = window.confirm(
+      `Delete the playlist "${name}"? The songs in it will be removed too.`,
+    );
+    if (!ok) return;
+
+    // If we are currently looking at it, step back to Browse first —
+    // otherwise the page would sit on a playlist that no longer exists.
+    if (view.kind === "playlist" && view.id === playlistId) {
+      onChange({ kind: "browse" });
+    }
+
+    await deletePlaylist(playlistId);
   }
 
   return (
@@ -105,17 +123,32 @@ export default function Sidebar({ view, onChange }: Props) {
       </div>
 
       {playlists.map((p) => (
-        <button
+        <div
           key={p.id}
-          onClick={() => onChange({ kind: "playlist", id: p.id })}
-          className={itemClass(view.kind === "playlist" && view.id === p.id)}
+          className="group/pl relative flex shrink-0 items-center md:w-full"
         >
-          <MusicIcon className="size-4 shrink-0" />
-          <span className="truncate">{p.name}</span>
-          <span className="ml-auto hidden text-xs tabular-nums text-muted md:inline">
-            {p.tracks.length}
-          </span>
-        </button>
+          <button
+            onClick={() => onChange({ kind: "playlist", id: p.id })}
+            className={`${itemClass(
+              view.kind === "playlist" && view.id === p.id,
+            )} min-w-0 flex-1 pr-8`}
+          >
+            <MusicIcon className="size-4 shrink-0" />
+            <span className="truncate">{p.name}</span>
+            <span className="ml-auto hidden text-xs tabular-nums text-muted md:inline">
+              {p.tracks.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => handleDelete(p.id, p.name)}
+            className="absolute right-1 rounded p-1 text-muted opacity-0 transition hover:bg-surface-2 hover:text-red-300 focus-visible:opacity-100 group-hover/pl:opacity-100"
+            aria-label={`Delete playlist ${p.name}`}
+            title="Delete playlist"
+          >
+            <TrashIcon className="size-3.5" />
+          </button>
+        </div>
       ))}
 
       {/* On phones the "+" lives inline, since the section header is hidden. */}

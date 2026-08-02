@@ -7,11 +7,14 @@ import TrackRow from "@/components/TrackRow";
 type Props = {
   tracks: Track[];
   emptyMessage?: string;
+  /** Set when showing a playlist, so rows can offer "remove from this one". */
+  playlistId?: string;
 };
 
 export default function TrackList({
   tracks,
   emptyMessage = "Nothing here yet.",
+  playlistId,
 }: Props) {
   const current = useCurrentTrack();
   const isPlaying = usePlayer((s) => s.isPlaying);
@@ -38,6 +41,7 @@ export default function TrackList({
             index={index}
             isCurrent={isCurrent}
             isPlaying={isPlaying}
+            playlistId={playlistId}
             onPlay={() => {
               // Clicking the song already playing pauses it instead of
               // restarting from the beginning.

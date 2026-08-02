@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import type { Track } from "@/lib/track";
 import { formatTime, formatCount } from "@/lib/format";
 import { useLibrary } from "@/store/library";
+import PlaylistMenu from "@/components/PlaylistMenu";
 import { HeartIcon, MusicIcon, PlayIcon, PauseIcon } from "@/components/icons";
 
 /** Three little bars that bounce while a track is playing. */
@@ -36,6 +36,8 @@ type Props = {
   isCurrent: boolean;
   isPlaying: boolean;
   onPlay: () => void;
+  /** Set when this row is inside a playlist, so the menu can offer removal. */
+  playlistId?: string;
 };
 
 export default function TrackRow({
@@ -44,32 +46,12 @@ export default function TrackRow({
   isCurrent,
   isPlaying,
   onPlay,
+  playlistId,
 }: Props) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const playlists = useLibrary((s) => s.playlists);
-  const addToPlaylist = useLibrary((s) => s.addToPlaylist);
-  const createPlaylist = useLibrary((s) => s.createPlaylist);
   const isFavorite = useLibrary((s) => s.isFavorite);
   const toggleFavorite = useLibrary((s) => s.toggleFavorite);
 
   const favorited = isFavorite(track.id);
-
-  async function handleNewPlaylist() {
-    const name = window.prompt("Playlist name");
-    if (name === null) return;
-
-    // Returns null when nobody is signed in — the store opens the
-    // sign-in dialog instead of silently doing nothing.
-    const playlist = await createPlaylist(name);
-    if (!playlist) {
-      setMenuOpen(false);
-      return;
-    }
-
-    await addToPlaylist(playlist.id, track);
-    setMenuOpen(false);
-  }
 
   return (
     <div
@@ -164,54 +146,11 @@ export default function TrackRow({
           <HeartIcon filled={favorited} className="size-4" />
         </button>
 
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className="rounded px-2 py-1 text-lg leading-none text-muted opacity-0 transition hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
-            aria-label="Add to playlist"
-            aria-expanded={menuOpen}
-          >
-            +
-          </button>
-
-          {menuOpen && (
-            <>
-              {/* Invisible full-screen layer: any click outside closes the
-                  menu without needing document listeners. */}
-              <button
-                className="fixed inset-0 z-10 cursor-default"
-                onClick={() => setMenuOpen(false)}
-                aria-label="Close menu"
-                tabIndex={-1}
-              />
-              <div className="absolute right-0 z-20 mt-1 max-h-64 w-52 overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-xl">
-                <p className="px-2 py-1.5 text-[11px] uppercase tracking-wide text-muted">
-                  Add to playlist
-                </p>
-
-                {playlists.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={async () => {
-                      await addToPlaylist(p.id, track);
-                      setMenuOpen(false);
-                    }}
-                    className="block w-full truncate rounded px-2 py-1.5 text-left text-sm transition hover:bg-surface-2"
-                  >
-                    {p.name}
-                  </button>
-                ))}
-
-                <button
-                  onClick={handleNewPlaylist}
-                  className="mt-1 block w-full rounded border-t border-line px-2 py-1.5 text-left text-sm text-accent transition hover:bg-surface-2"
-                >
-                  + New playlist
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <PlaylistMenu
+          track={track}
+          currentPlaylistId={playlistId}
+          className="rounded px-2 py-1 text-lg leading-none text-muted opacity-0 transition hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+        />
 
         <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted">
           {formatTime(track.duration)}

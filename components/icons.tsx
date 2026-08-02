@@ -191,6 +191,24 @@ export const TrendingIcon = ({ className = "size-5" }: IconProps) => (
   </svg>
 );
 
+export const TrashIcon = ({ className = "size-4" }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={base}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M3 6h18" />
+    <path d="M8 6V4h8v2" />
+    <path d="M6 6v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6" />
+    <path d="M10 11v6M14 11v6" />
+  </svg>
+);
+
 export const UserIcon = ({ className = "size-5" }: IconProps) => (
   <svg
     viewBox="0 0 24 24"

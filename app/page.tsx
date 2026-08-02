@@ -252,7 +252,13 @@ export default function Home() {
                   </h1>
                   <p className="text-xs text-muted">{saved.subheading}</p>
                 </header>
-                <TrackList tracks={saved.tracks} emptyMessage={saved.empty} />
+                <TrackList
+                  tracks={saved.tracks}
+                  emptyMessage={saved.empty}
+                  // Only set inside a playlist — it turns on the
+                  // "remove from this playlist" option in each row's menu.
+                  playlistId={view.kind === "playlist" ? view.id : undefined}
+                />
               </section>
             )}
 

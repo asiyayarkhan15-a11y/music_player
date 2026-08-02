@@ -3,6 +3,7 @@
 import { usePlayer, useCurrentTrack } from "@/store/player";
 import { useLibrary } from "@/store/library";
 import { formatTime } from "@/lib/format";
+import PlaylistMenu from "@/components/PlaylistMenu";
 import {
   PlayIcon,
   PauseIcon,
@@ -140,16 +141,25 @@ export default function PlayerBar() {
           </div>
 
           {track && (
-            <button
-              onClick={() => toggleFavorite(track)}
-              className={`ml-1 hidden shrink-0 rounded p-1.5 transition sm:block ${
-                favorited ? "text-accent" : "text-muted hover:text-fg"
-              }`}
-              aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
-              aria-pressed={favorited}
-            >
-              <HeartIcon filled={favorited} className="size-4" />
-            </button>
+            <div className="ml-1 flex shrink-0 items-center">
+              <button
+                onClick={() => toggleFavorite(track)}
+                className={`rounded p-1.5 transition ${
+                  favorited ? "text-accent" : "text-muted hover:text-fg"
+                }`}
+                aria-label={
+                  favorited ? "Remove from favorites" : "Add to favorites"
+                }
+                aria-pressed={favorited}
+              >
+                <HeartIcon filled={favorited} className="size-4" />
+              </button>
+
+              <PlaylistMenu
+                track={track}
+                className="rounded px-2 py-0.5 text-lg leading-none text-muted transition hover:text-fg"
+              />
+            </div>
           )}
         </div>
 
