@@ -58,7 +58,15 @@ export default function TrackRow({
   async function handleNewPlaylist() {
     const name = window.prompt("Playlist name");
     if (name === null) return;
+
+    // Returns null when nobody is signed in — the store opens the
+    // sign-in dialog instead of silently doing nothing.
     const playlist = await createPlaylist(name);
+    if (!playlist) {
+      setMenuOpen(false);
+      return;
+    }
+
     await addToPlaylist(playlist.id, track);
     setMenuOpen(false);
   }

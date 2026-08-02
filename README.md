@@ -36,12 +36,12 @@ file for where to get one.
 
 ## Keyboard shortcuts
 
-| Key | Action |
-|---|---|
-| `Space` | Play / pause |
-| `←` `→` | Seek 5 seconds |
-| `↑` `↓` | Volume |
-| `M` | Mute |
+| Key       | Action                |
+| --------- | --------------------- |
+| `Space`   | Play / pause          |
+| `←` `→`   | Seek 5 seconds        |
+| `↑` `↓`   | Volume                |
+| `M`       | Mute                  |
 | `N` / `P` | Next / previous track |
 
 Hardware media keys and the lock screen also work, via the Media Session API.
@@ -82,7 +82,7 @@ the layout, so playback survives every re-render. Put either one inside a
 page or a list item and the music stops whenever React re-renders it.
 
 **The YouTube iframe gets a DOM node created outside React.** The IFrame API
-*replaces* the element you hand it. If React owned that element, it would
+_replaces_ the element you hand it. If React owned that element, it would
 later try to remove a child that no longer exists and throw.
 
 **Unplayable tracks are filtered out.** Audius returns `is_streamable: false`
@@ -136,3 +136,5 @@ settings — `.env.local` is gitignored and never reaches Vercel.
   removed the compiler API Next.js used to call.
 - Audio streams straight from Audius to the browser, not through the server.
   Proxying audio would burn hosting bandwidth for no benefit.
+- Google OAuth credentials live in the Supabase dashboard, not in this repo.
+  The client secret must never be committed.

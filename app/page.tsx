@@ -8,7 +8,9 @@ import Sidebar, { type View } from "@/components/Sidebar";
 import SearchBar from "@/components/SearchBar";
 import TrackList from "@/components/TrackList";
 import PlayerBar from "@/components/PlayerBar";
+import AuthDialog from "@/components/AuthDialog";
 import { usePlayer } from "@/store/player";
+import { useAuth } from "@/store/auth";
 
 type YouTubeStatus = "ok" | "quota" | "disabled" | "error";
 
@@ -31,13 +33,18 @@ export default function Home() {
   const favorites = useLibrary((s) => s.favorites);
   const playlists = useLibrary((s) => s.playlists);
   const playbackError = usePlayer((s) => s.lastError);
+  const initAuth = useAuth((s) => s.init);
+  const user = useAuth((s) => s.user);
 
-  /* Read saved favorites and playlists once, after the page mounts.
-     It has to be after mount because localStorage does not exist on the
-     server, and reading it during render would break hydration. */
+  /* Start listening for the login session. This also picks up the
+     `?code=...` that the magic-link email sends people back with. */
+  useEffect(() => initAuth(), [initAuth]);
+
+  /* Load saved music whenever the signed-in user changes — including on
+     sign-out, when `load` empties the lists. */
   useEffect(() => {
     loadLibrary();
-  }, [loadLibrary]);
+  }, [loadLibrary, user]);
 
   /* Wait 300ms after the last keystroke before searching.
      Without this, typing "lofi" fires four separate requests — and each
@@ -116,7 +123,9 @@ export default function Home() {
         heading: "Favorites",
         subheading: `${favorites.length} saved`,
         tracks: favorites,
-        empty: "Tap the heart on any song to save it here.",
+        empty: user
+          ? "Tap the heart on any song to save it here."
+          : "Sign in to save songs to your account.",
       };
     }
     if (view.kind === "playlist") {
@@ -128,7 +137,7 @@ export default function Home() {
       };
     }
     return null;
-  }, [view, favorites, activePlaylist]);
+  }, [view, favorites, activePlaylist, user]);
 
   return (
     <div className="flex h-dvh flex-col">
@@ -267,6 +276,7 @@ export default function Home() {
       </div>
 
       <PlayerBar />
+      <AuthDialog />
     </div>
   );
 }

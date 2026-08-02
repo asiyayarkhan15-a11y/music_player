@@ -1,6 +1,7 @@
 "use client";
 
 import { useLibrary } from "@/store/library";
+import { useAuth } from "@/store/auth";
 import { HeartIcon, TrendingIcon, MusicIcon } from "@/components/icons";
 
 export type View =
@@ -22,6 +23,10 @@ export default function Sidebar({ view, onChange }: Props) {
   const favorites = useLibrary((s) => s.favorites);
   const createPlaylist = useLibrary((s) => s.createPlaylist);
 
+  const user = useAuth((s) => s.user);
+  const openDialog = useAuth((s) => s.openDialog);
+  const signOut = useAuth((s) => s.signOut);
+
   const itemClass = (active: boolean) =>
     `flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
       active
@@ -30,10 +35,18 @@ export default function Sidebar({ view, onChange }: Props) {
     }`;
 
   async function handleCreate() {
+    // Signed out: don't ask for a name we cannot save. The store opens
+    // the sign-in dialog instead and returns null.
+    if (!user) {
+      openDialog();
+      return;
+    }
+
     const name = window.prompt("Playlist name");
     if (name === null) return;
+
     const playlist = await createPlaylist(name);
-    onChange({ kind: "playlist", id: playlist.id });
+    if (playlist) onChange({ kind: "playlist", id: playlist.id });
   }
 
   return (
@@ -104,6 +117,33 @@ export default function Sidebar({ view, onChange }: Props) {
       >
         + New
       </button>
+
+      {/* ---------------- account ---------------- */}
+      <div className="ml-auto flex shrink-0 items-center md:ml-0 md:mt-auto md:block md:border-t md:border-line md:pt-3">
+        {user ? (
+          <div className="flex items-center gap-2 md:block">
+            <p
+              className="hidden truncate px-3 text-[11px] text-muted md:block"
+              title={user.email ?? ""}
+            >
+              {user.email}
+            </p>
+            <button
+              onClick={signOut}
+              className={`${itemClass(false)} md:mt-1 md:w-full`}
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={openDialog}
+            className="shrink-0 rounded-lg bg-surface-2 px-3 py-2 text-sm text-fg transition hover:brightness-125 md:w-full"
+          >
+            Sign in
+          </button>
+        )}
+      </div>
     </nav>
   );
 }
