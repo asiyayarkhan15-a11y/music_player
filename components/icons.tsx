@@ -191,6 +191,22 @@ export const TrendingIcon = ({ className = "size-5" }: IconProps) => (
   </svg>
 );
 
+export const UserIcon = ({ className = "size-5" }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={base}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
+  </svg>
+);
+
 /** Google's four-colour G. Fixed brand colours, so it ignores currentColor. */
 export const GoogleIcon = ({ className = "size-4" }: IconProps) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true">

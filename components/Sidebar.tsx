@@ -2,7 +2,13 @@
 
 import { useLibrary } from "@/store/library";
 import { useAuth } from "@/store/auth";
-import { HeartIcon, TrendingIcon, MusicIcon } from "@/components/icons";
+import { useProfile, displayNameFor } from "@/store/profile";
+import {
+  HeartIcon,
+  TrendingIcon,
+  MusicIcon,
+  UserIcon,
+} from "@/components/icons";
 
 export type View =
   | { kind: "browse" }
@@ -26,6 +32,9 @@ export default function Sidebar({ view, onChange }: Props) {
   const user = useAuth((s) => s.user);
   const openDialog = useAuth((s) => s.openDialog);
   const signOut = useAuth((s) => s.signOut);
+
+  const profile = useProfile((s) => s.profile);
+  const openProfile = useProfile((s) => s.openDialog);
 
   const itemClass = (active: boolean) =>
     `flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
@@ -119,22 +128,44 @@ export default function Sidebar({ view, onChange }: Props) {
       </button>
 
       {/* ---------------- account ---------------- */}
-      <div className="ml-auto flex shrink-0 items-center md:ml-0 md:mt-auto md:block md:border-t md:border-line md:pt-3">
+      <div className="ml-auto flex shrink-0 items-center gap-1 md:ml-0 md:mt-auto md:block md:border-t md:border-line md:pt-3">
         {user ? (
-          <div className="flex items-center gap-2 md:block">
-            <p
-              className="hidden truncate px-3 text-[11px] text-muted md:block"
-              title={user.email ?? ""}
+          <>
+            {/* The whole row is the button — picture, name and all. */}
+            <button
+              onClick={openProfile}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface-2/60"
+              title="Edit your profile"
             >
-              {user.email}
-            </p>
+              <span className="grid size-7 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-2">
+                {profile?.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.avatarUrl}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <UserIcon className="size-4 text-muted" />
+                )}
+              </span>
+              <span className="hidden min-w-0 md:block">
+                <span className="block truncate text-sm">
+                  {displayNameFor(profile, user.email)}
+                </span>
+                <span className="block truncate text-[11px] text-muted">
+                  {user.email}
+                </span>
+              </span>
+            </button>
+
             <button
               onClick={signOut}
-              className={`${itemClass(false)} md:mt-1 md:w-full`}
+              className={`${itemClass(false)} md:mt-0.5 md:w-full`}
             >
               Sign out
             </button>
-          </div>
+          </>
         ) : (
           <button
             onClick={openDialog}

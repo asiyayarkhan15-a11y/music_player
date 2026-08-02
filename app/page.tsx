@@ -9,8 +9,10 @@ import SearchBar from "@/components/SearchBar";
 import TrackList from "@/components/TrackList";
 import PlayerBar from "@/components/PlayerBar";
 import AuthDialog from "@/components/AuthDialog";
+import ProfileDialog from "@/components/ProfileDialog";
 import { usePlayer } from "@/store/player";
 import { useAuth } from "@/store/auth";
+import { useProfile } from "@/store/profile";
 
 type YouTubeStatus = "ok" | "quota" | "disabled" | "error";
 
@@ -35,16 +37,20 @@ export default function Home() {
   const playbackError = usePlayer((s) => s.lastError);
   const initAuth = useAuth((s) => s.init);
   const user = useAuth((s) => s.user);
+  const loadProfile = useProfile((s) => s.load);
+  const clearProfile = useProfile((s) => s.clear);
 
   /* Start listening for the login session. This also picks up the
      `?code=...` that the magic-link email sends people back with. */
   useEffect(() => initAuth(), [initAuth]);
 
-  /* Load saved music whenever the signed-in user changes — including on
-     sign-out, when `load` empties the lists. */
+  /* Load saved music and the profile whenever the signed-in user changes —
+     including on sign-out, when both are emptied. */
   useEffect(() => {
     loadLibrary();
-  }, [loadLibrary, user]);
+    if (user) loadProfile();
+    else clearProfile();
+  }, [loadLibrary, loadProfile, clearProfile, user]);
 
   /* Wait 300ms after the last keystroke before searching.
      Without this, typing "lofi" fires four separate requests — and each
@@ -277,6 +283,7 @@ export default function Home() {
 
       <PlayerBar />
       <AuthDialog />
+      <ProfileDialog />
     </div>
   );
 }
