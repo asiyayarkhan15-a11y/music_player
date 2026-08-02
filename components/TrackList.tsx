@@ -1,6 +1,6 @@
 "use client";
 
-import type { Track } from "@/lib/audius";
+import type { Track } from "@/lib/track";
 import { usePlayer, useCurrentTrack } from "@/store/player";
 import TrackRow from "@/components/TrackRow";
 

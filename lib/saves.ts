@@ -26,7 +26,7 @@
  * └──────────────────────────────────────────────────────────────────┘
  */
 
-import type { Track } from "@/lib/audius";
+import type { Track } from "@/lib/track";
 
 export type Playlist = {
   id: string;

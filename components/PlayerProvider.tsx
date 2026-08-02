@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { registerAudio, usePlayer, useCurrentTrack } from "@/store/player";
+import { usePlayer, useCurrentTrack } from "@/store/player";
+import {
+  engineEvents,
+  registerAudioElement,
+  registerYouTubeMount,
+} from "@/lib/engines";
 
 /**
- * There is exactly ONE <audio> element in this whole app, and it lives here.
+ * Owns both players for the whole app.
  *
- * This component is mounted in app/layout.tsx, which React never unmounts.
- * That matters: if the audio element were inside a page or a list item,
- * React would destroy and recreate it on re-render and the music would
- * stop dead. This is the most common bug in React music players.
+ * Mounted in app/layout.tsx, which React never unmounts. That matters: if
+ * either player lived inside a page or a list item, React would destroy and
+ * recreate it on re-render and the music would stop dead. This is the most
+ * common bug in React music players.
  */
 export default function PlayerProvider({
   children,
@@ -17,11 +22,15 @@ export default function PlayerProvider({
   children: React.ReactNode;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoWrapRef = useRef<HTMLDivElement | null>(null);
+
   const track = useCurrentTrack();
+  const showVideo = track?.source === "youtube";
 
   const setTime = usePlayer((s) => s.setTime);
   const setLoading = usePlayer((s) => s.setLoading);
   const handleEnded = usePlayer((s) => s.handleEnded);
+  const handleError = usePlayer((s) => s.handleError);
   const togglePlay = usePlayer((s) => s.togglePlay);
   const next = usePlayer((s) => s.next);
   const previous = usePlayer((s) => s.previous);
@@ -29,13 +38,43 @@ export default function PlayerProvider({
   const setVolume = usePlayer((s) => s.setVolume);
   const toggleMute = usePlayer((s) => s.toggleMute);
 
-  /* Hand the element to the store, and apply the starting volume. */
+  /* Hand the <audio> element to the engine layer. */
   useEffect(() => {
-    const el = audioRef.current;
-    registerAudio(el);
-    if (el) el.volume = usePlayer.getState().volume ** 2;
-    return () => registerAudio(null);
+    registerAudioElement(audioRef.current);
+    return () => registerAudioElement(null);
   }, []);
+
+  /*
+   * Give YouTube its own DOM node, created outside React.
+   *
+   * The IFrame API REPLACES the element you hand it with an <iframe>. If
+   * that element were rendered by React, React would later try to remove a
+   * child that no longer exists and throw. Creating it manually keeps the
+   * node invisible to React's reconciler.
+   */
+  useEffect(() => {
+    const wrapper = videoWrapRef.current;
+    if (!wrapper) return;
+
+    const host = document.createElement("div");
+    host.style.width = "100%";
+    host.style.height = "100%";
+    wrapper.appendChild(host);
+    registerYouTubeMount(host);
+
+    return () => {
+      registerYouTubeMount(null);
+      host.remove();
+    };
+  }, []);
+
+  /* Point the engines' callbacks at the store. */
+  useEffect(() => {
+    engineEvents.onTime = setTime;
+    engineEvents.onEnded = handleEnded;
+    engineEvents.onLoading = setLoading;
+    engineEvents.onError = handleError;
+  }, [setTime, handleEnded, setLoading, handleError]);
 
   /* Keyboard shortcuts. */
   useEffect(() => {
@@ -51,7 +90,7 @@ export default function PlayerProvider({
         return;
       }
 
-      const audio = audioRef.current;
+      const { currentTime, duration } = usePlayer.getState();
 
       switch (e.key) {
         case " ":
@@ -59,10 +98,10 @@ export default function PlayerProvider({
           togglePlay();
           break;
         case "ArrowRight":
-          if (audio) seek(Math.min(audio.duration || 0, audio.currentTime + 5));
+          seek(Math.min(duration || 0, currentTime + 5));
           break;
         case "ArrowLeft":
-          if (audio) seek(Math.max(0, audio.currentTime - 5));
+          seek(Math.max(0, currentTime - 5));
           break;
         case "ArrowUp":
           e.preventDefault();
@@ -92,9 +131,9 @@ export default function PlayerProvider({
   }, [togglePlay, seek, setVolume, toggleMute, next, previous]);
 
   /*
-   * Media Session API — makes the hardware play/pause keys on a keyboard,
-   * headphones, and the phone lock screen control our player.
-   * Roughly ten lines for a feature people assume is very hard.
+   * Media Session API — makes hardware play/pause keys, headphone buttons
+   * and the phone lock screen control our player. Works for both sources,
+   * because it drives our store rather than either player directly.
    */
   useEffect(() => {
     if (!("mediaSession" in navigator) || !track) return;
@@ -116,6 +155,8 @@ export default function PlayerProvider({
   return (
     <>
       {children}
+
+      {/* Audius playback. */}
       <audio
         ref={audioRef}
         preload="metadata"
@@ -131,11 +172,27 @@ export default function PlayerProvider({
         onPlaying={() => setLoading(false)}
         onCanPlay={() => setLoading(false)}
         onEnded={handleEnded}
-        onError={() => {
-          setLoading(false);
-          usePlayer.setState({ isPlaying: false });
-        }}
+        onError={handleError}
       />
+
+      {/*
+        YouTube playback.
+
+        This panel must stay visible while a YouTube track plays — YouTube's
+        terms require the player on screen at a minimum of 200x200 and forbid
+        audio-only use. It is hidden only when an Audius track is playing,
+        when nothing is running through it.
+      */}
+      <div
+        className={
+          showVideo
+            ? "fixed bottom-28 right-3 z-40 w-64 overflow-hidden rounded-xl border border-line bg-black shadow-2xl sm:w-80 md:bottom-24"
+            : "pointer-events-none fixed -left-[9999px] top-0 h-px w-px overflow-hidden opacity-0"
+        }
+        aria-hidden={!showVideo}
+      >
+        <div ref={videoWrapRef} className="aspect-video w-full" />
+      </div>
     </>
   );
 }

@@ -1,28 +1,10 @@
 "use client";
 
 import { create } from "zustand";
-import type { Track } from "@/lib/audius";
-import { streamUrl } from "@/lib/audius";
+import type { Track } from "@/lib/track";
+import { getEngine, stopOtherEngine } from "@/lib/engines";
 
 export type RepeatMode = "off" | "all" | "one";
-
-/**
- * The <audio> element itself is NOT React state.
- *
- * React state is for things that change what you SEE. The audio element is
- * a machine we give orders to. Keeping it here (module scope) means the
- * store can call .play() directly, and React never re-renders because of it.
- * PlayerProvider registers it once when the app starts.
- */
-let audio: HTMLAudioElement | null = null;
-
-export function registerAudio(element: HTMLAudioElement | null) {
-  audio = element;
-}
-
-export function getAudio() {
-  return audio;
-}
 
 type PlayerState = {
   /** The tracks loaded into the player. */
@@ -39,6 +21,8 @@ type PlayerState = {
   isLoading: boolean;
   currentTime: number;
   duration: number;
+  /** Set when a track refuses to play, so the UI can say something. */
+  lastError: string | null;
 
   volume: number; // 0..1, what the slider shows
   muted: boolean;
@@ -55,6 +39,7 @@ type PlayerState = {
   toggleShuffle: () => void;
   cycleRepeat: () => void;
   handleEnded: () => void;
+  handleError: () => void;
   setTime: (current: number, duration: number) => void;
   setLoading: (loading: boolean) => void;
 };
@@ -78,26 +63,19 @@ function buildOrder(length: number, shuffle: boolean, startIndex: number) {
   return { order: [startIndex, ...rest], pos: 0 };
 }
 
-/**
- * Ears do not hear volume in a straight line. A slider at 50% sounds far
- * louder than "half" if you pass it through directly. Squaring it makes
- * the slider feel even along its whole length.
- */
-function perceptual(v: number) {
-  return Math.max(0, Math.min(1, v)) ** 2;
+/** Hand a track to the right engine, and silence the other one. */
+function load(track: Track | undefined, autoplay: boolean) {
+  if (!track) return;
+  stopOtherEngine(track.source);
+  const engine = getEngine(track.source);
+  engine.applyVolume(usePlayer.getState().volume, usePlayer.getState().muted);
+  engine.load(track.sourceId, autoplay);
 }
 
-/** Load a track into the audio element and start it. */
-function load(track: Track | undefined, play: boolean) {
-  if (!audio || !track) return;
-  audio.src = streamUrl(track.id);
-  audio.load();
-  if (play) {
-    // Browsers reject play() until the user has interacted with the page.
-    audio.play().catch(() => {
-      usePlayer.setState({ isPlaying: false });
-    });
-  }
+function currentEngine() {
+  const s = usePlayer.getState();
+  const track = s.queue[s.order[s.pos]];
+  return track ? getEngine(track.source) : null;
 }
 
 export const usePlayer = create<PlayerState>((set, get) => ({
@@ -108,6 +86,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   isLoading: false,
   currentTime: 0,
   duration: 0,
+  lastError: null,
   volume: 0.8,
   muted: false,
   shuffle: false,
@@ -118,19 +97,28 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const { shuffle } = get();
     const { order, pos } = buildOrder(tracks.length, shuffle, startIndex);
 
-    set({ queue: tracks, order, pos, isPlaying: true, currentTime: 0 });
+    set({
+      queue: tracks,
+      order,
+      pos,
+      isPlaying: true,
+      currentTime: 0,
+      duration: tracks[order[pos]]?.duration ?? 0,
+      lastError: null,
+    });
     load(tracks[order[pos]], true);
   },
 
   togglePlay: () => {
     const { isPlaying, queue } = get();
-    if (!audio || queue.length === 0) return;
+    const engine = currentEngine();
+    if (!engine || queue.length === 0) return;
 
     if (isPlaying) {
-      audio.pause();
+      engine.pause();
       set({ isPlaying: false });
     } else {
-      audio.play().catch(() => set({ isPlaying: false }));
+      engine.play();
       set({ isPlaying: true });
     }
   },
@@ -142,10 +130,9 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     // Repeat-one only loops when a song ENDS. Pressing skip still skips —
     // otherwise the button would appear broken.
     if (auto && repeat === "one") {
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().catch(() => {});
-      }
+      const engine = currentEngine();
+      engine?.seek(0);
+      engine?.play();
       return;
     }
 
@@ -153,54 +140,69 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
     if (last && repeat === "off") {
       if (auto) {
-        audio?.pause();
+        currentEngine()?.pause();
         set({ isPlaying: false, currentTime: 0 });
-        return;
       }
-      return; // manual next at the end does nothing
+      return;
     }
 
     const nextPos = last ? 0 : pos + 1;
-    set({ pos: nextPos, currentTime: 0, isPlaying: true });
-    load(queue[order[nextPos]], true);
+    const track = queue[order[nextPos]];
+    set({
+      pos: nextPos,
+      currentTime: 0,
+      duration: track?.duration ?? 0,
+      isPlaying: true,
+      lastError: null,
+    });
+    load(track, true);
   },
 
   previous: () => {
     const { order, pos, queue } = get();
-    if (queue.length === 0 || !audio) return;
+    const engine = currentEngine();
+    if (queue.length === 0 || !engine) return;
 
     // Standard music-player behaviour: if you are more than 3 seconds in,
     // "previous" restarts this song instead of leaving it.
-    if (audio.currentTime > 3) {
-      audio.currentTime = 0;
+    if (engine.getTime() > 3) {
+      engine.seek(0);
       set({ currentTime: 0 });
       return;
     }
 
     const prevPos = pos === 0 ? order.length - 1 : pos - 1;
-    set({ pos: prevPos, currentTime: 0, isPlaying: true });
-    load(queue[order[prevPos]], true);
+    const track = queue[order[prevPos]];
+    set({
+      pos: prevPos,
+      currentTime: 0,
+      duration: track?.duration ?? 0,
+      isPlaying: true,
+      lastError: null,
+    });
+    load(track, true);
   },
 
   seek: (seconds) => {
-    if (!audio) return;
-    audio.currentTime = seconds;
+    currentEngine()?.seek(seconds);
     set({ currentTime: seconds });
   },
 
   setVolume: (v) => {
-    const clamped = Math.max(0, Math.min(1, v));
-    if (audio) {
-      audio.volume = perceptual(clamped);
-      audio.muted = false;
-    }
-    set({ volume: clamped, muted: false });
+    const volume = Math.max(0, Math.min(1, v));
+    // Applied to BOTH engines so the level does not jump when the next
+    // track comes from the other source.
+    getEngine("audius").applyVolume(volume, false);
+    getEngine("youtube").applyVolume(volume, false);
+    set({ volume, muted: false });
   },
 
   toggleMute: () => {
-    const next = !get().muted;
-    if (audio) audio.muted = next;
-    set({ muted: next });
+    const muted = !get().muted;
+    const { volume } = get();
+    getEngine("audius").applyVolume(volume, muted);
+    getEngine("youtube").applyVolume(volume, muted);
+    set({ muted });
   },
 
   toggleShuffle: () => {
@@ -229,7 +231,29 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   handleEnded: () => get().next(true),
 
-  setTime: (currentTime, duration) => set({ currentTime, duration }),
+  /**
+   * A track refused to play — a deleted Audius upload, or a YouTube video
+   * whose owner blocked embedding after we listed it. Skip on rather than
+   * leave the user staring at a stuck player.
+   */
+  handleError: () => {
+    const { order, pos, queue } = get();
+    const failed = queue[order[pos]];
+    const more = pos < order.length - 1;
+
+    set({
+      isLoading: false,
+      lastError: failed
+        ? `Could not play “${failed.title}”${more ? " — skipping." : "."}`
+        : "Could not play that track.",
+    });
+
+    if (more) get().next(true);
+    else set({ isPlaying: false });
+  },
+
+  setTime: (currentTime, duration) =>
+    set((s) => ({ currentTime, duration: duration || s.duration })),
   setLoading: (isLoading) => set({ isLoading }),
 }));
 

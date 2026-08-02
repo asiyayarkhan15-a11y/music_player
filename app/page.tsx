@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Track } from "@/lib/audius";
+import type { Track } from "@/lib/track";
 import { GENRES } from "@/lib/audius";
 import { useLibrary } from "@/store/library";
 import Sidebar, { type View } from "@/components/Sidebar";
 import SearchBar from "@/components/SearchBar";
 import TrackList from "@/components/TrackList";
 import PlayerBar from "@/components/PlayerBar";
+import { usePlayer } from "@/store/player";
+
+type YouTubeStatus = "ok" | "quota" | "disabled" | "error";
 
 export default function Home() {
   const [view, setView] = useState<View>({ kind: "browse" });
@@ -16,7 +19,10 @@ export default function Home() {
   const [debounced, setDebounced] = useState("");
   const [genre, setGenre] = useState<string | null>(null);
 
-  const [results, setResults] = useState<Track[]>([]);
+  const [audiusHits, setAudiusHits] = useState<Track[]>([]);
+  const [youtubeHits, setYoutubeHits] = useState<Track[]>([]);
+  const [ytStatus, setYtStatus] = useState<YouTubeStatus>("ok");
+
   const [trending, setTrending] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +30,7 @@ export default function Home() {
   const loadLibrary = useLibrary((s) => s.load);
   const favorites = useLibrary((s) => s.favorites);
   const playlists = useLibrary((s) => s.playlists);
+  const playbackError = usePlayer((s) => s.lastError);
 
   /* Read saved favorites and playlists once, after the page mounts.
      It has to be after mount because localStorage does not exist on the
@@ -33,16 +40,19 @@ export default function Home() {
   }, [loadLibrary]);
 
   /* Wait 300ms after the last keystroke before searching.
-     Without this, typing "lofi" fires four separate requests. */
+     Without this, typing "lofi" fires four separate requests — and each
+     one would spend 100 units of the YouTube daily quota. */
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), 300);
     return () => clearTimeout(timer);
   }, [query]);
 
-  /* Search. */
+  /* Search both sources. */
   useEffect(() => {
     if (!debounced) {
-      setResults([]);
+      setAudiusHits([]);
+      setYoutubeHits([]);
+      setYtStatus("ok");
       return;
     }
 
@@ -50,13 +60,15 @@ export default function Home() {
     setLoading(true);
     setError(null);
 
-    fetch(`/api/audius/search?q=${encodeURIComponent(debounced)}`, {
+    fetch(`/api/search?q=${encodeURIComponent(debounced)}`, {
       signal: controller.signal,
     })
       .then((r) => r.json())
       .then((data) => {
-        setResults(data.tracks ?? []);
-        if (data.error) setError(data.error);
+        setAudiusHits(data.audius ?? []);
+        setYoutubeHits(data.youtube ?? []);
+        setYtStatus(data.youtubeStatus ?? "ok");
+        if (data.audiusFailed) setError("Audius did not respond.");
       })
       .catch((e) => {
         // An aborted request is not a failure — a newer search replaced it.
@@ -69,14 +81,15 @@ export default function Home() {
     return () => controller.abort();
   }, [debounced]);
 
-  /* Trending, for the browse view and the genre buttons. */
+  /* Trending, for the browse view and the genre buttons. Audius only —
+     YouTube has no cheap "what is popular" endpoint. */
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
 
     const url = genre
-      ? `/api/audius/trending?genre=${encodeURIComponent(genre)}`
-      : "/api/audius/trending";
+      ? `/api/trending?genre=${encodeURIComponent(genre)}`
+      : "/api/trending";
 
     fetch(url, { signal: controller.signal })
       .then((r) => r.json())
@@ -97,16 +110,7 @@ export default function Home() {
   const activePlaylist =
     view.kind === "playlist" ? playlists.find((p) => p.id === view.id) : null;
 
-  const { heading, subheading, tracks, empty } = useMemo(() => {
-    if (searching) {
-      return {
-        heading: `Results for “${debounced}”`,
-        subheading: `${results.length} track${results.length === 1 ? "" : "s"}`,
-        tracks: results,
-        empty: "No songs found. Try a different word.",
-      };
-    }
-
+  const saved = useMemo(() => {
     if (view.kind === "favorites") {
       return {
         heading: "Favorites",
@@ -115,7 +119,6 @@ export default function Home() {
         empty: "Tap the heart on any song to save it here.",
       };
     }
-
     if (view.kind === "playlist") {
       return {
         heading: activePlaylist?.name ?? "Playlist",
@@ -124,23 +127,8 @@ export default function Home() {
         empty: "Empty playlist. Use the + button on a song to add one.",
       };
     }
-
-    return {
-      heading: genre ? `Trending in ${genre}` : "Trending this week",
-      subheading: "Popular on Audius right now",
-      tracks: trending,
-      empty: "Nothing to show. Audius may be unreachable.",
-    };
-  }, [
-    searching,
-    debounced,
-    results,
-    view,
-    favorites,
-    activePlaylist,
-    genre,
-    trending,
-  ]);
+    return null;
+  }, [view, favorites, activePlaylist]);
 
   return (
     <div className="flex h-dvh flex-col">
@@ -181,21 +169,98 @@ export default function Home() {
               </div>
             )}
 
-            <header className="mb-2 mt-6">
-              <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
-              <p className="text-xs text-muted">{subheading}</p>
-            </header>
-
-            {error && (
-              <p className="mb-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-muted">
-                {error}
+            {(error || playbackError) && (
+              <p className="mt-4 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-muted">
+                {error ?? playbackError}
               </p>
             )}
 
-            <TrackList tracks={tracks} emptyMessage={empty} />
+            {/* ---------------- search results ---------------- */}
+            {searching && (
+              <>
+                {ytStatus === "quota" && (
+                  <p className="mt-4 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-muted">
+                    YouTube&rsquo;s daily search limit is used up — showing
+                    Audius results only. It resets at midnight Pacific time.
+                  </p>
+                )}
+                {ytStatus === "disabled" &&
+                  process.env.NODE_ENV === "development" && (
+                    <p className="mt-4 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted">
+                      YouTube is off — add <code>YOUTUBE_API_KEY</code> to{" "}
+                      <code>.env.local</code> and restart to switch it on.
+                    </p>
+                  )}
+
+                {youtubeHits.length > 0 && (
+                  <section className="mt-6">
+                    <header className="mb-2">
+                      <h2 className="text-xl font-semibold tracking-tight">
+                        Full songs
+                      </h2>
+                      <p className="text-xs text-muted">
+                        From YouTube · plays as video
+                      </p>
+                    </header>
+                    <TrackList tracks={youtubeHits} />
+                  </section>
+                )}
+
+                <section className="mt-6">
+                  <header className="mb-2">
+                    <h2 className="text-xl font-semibold tracking-tight">
+                      {youtubeHits.length > 0 ? "More from Audius" : "Results"}
+                    </h2>
+                    <p className="text-xs text-muted">
+                      {audiusHits.length} track
+                      {audiusHits.length === 1 ? "" : "s"} · independent artists
+                    </p>
+                  </header>
+                  <TrackList
+                    tracks={audiusHits}
+                    emptyMessage={
+                      youtubeHits.length > 0
+                        ? "No Audius tracks matched."
+                        : "No songs found. Try a different word."
+                    }
+                  />
+                </section>
+              </>
+            )}
+
+            {/* ---------------- saved views ---------------- */}
+            {!searching && saved && (
+              <section className="mt-6">
+                <header className="mb-2">
+                  <h1 className="text-xl font-semibold tracking-tight">
+                    {saved.heading}
+                  </h1>
+                  <p className="text-xs text-muted">{saved.subheading}</p>
+                </header>
+                <TrackList tracks={saved.tracks} emptyMessage={saved.empty} />
+              </section>
+            )}
+
+            {/* ---------------- browse ---------------- */}
+            {!searching && !saved && (
+              <section className="mt-6">
+                <header className="mb-2">
+                  <h1 className="text-xl font-semibold tracking-tight">
+                    {genre ? `Trending in ${genre}` : "Trending this week"}
+                  </h1>
+                  <p className="text-xs text-muted">
+                    Popular on Audius · search to find mainstream songs
+                  </p>
+                </header>
+                <TrackList
+                  tracks={trending}
+                  emptyMessage="Nothing to show. Audius may be unreachable."
+                />
+              </section>
+            )}
 
             <p className="py-8 text-center text-[11px] text-muted">
-              Music from Audius · Space to play · N next · P previous · M mute
+              Audius &amp; YouTube · Space to play · N next · P previous · M mute
             </p>
           </div>
         </main>

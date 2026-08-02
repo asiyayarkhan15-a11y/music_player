@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Track } from "@/lib/audius";
+import type { Track } from "@/lib/track";
 import { formatTime, formatCount } from "@/lib/format";
 import { useLibrary } from "@/store/library";
 import { HeartIcon, MusicIcon, PlayIcon, PauseIcon } from "@/components/icons";
@@ -120,14 +120,25 @@ export default function TrackRow({
         <p className="truncate text-xs text-muted">{track.artist}</p>
       </button>
 
-      {/* genre — hidden on small screens */}
-      <span className="hidden max-w-[10rem] truncate rounded-full bg-surface-2 px-2.5 py-1 text-[11px] text-muted sm:block">
-        {track.genre}
+      {/* Where this track comes from. YouTube is marked clearly because it
+          plays as a video and behaves differently from an Audius stream. */}
+      <span
+        className={`hidden max-w-[10rem] truncate rounded-full px-2.5 py-1 text-[11px] sm:block ${
+          track.source === "youtube"
+            ? "bg-red-500/15 text-red-300"
+            : "bg-surface-2 text-muted"
+        }`}
+      >
+        {track.source === "youtube" ? "YouTube" : track.genre}
       </span>
 
-      {/* play count */}
+      {/* Audius counts plays, YouTube counts views. */}
       <span className="hidden text-xs tabular-nums text-muted sm:block">
-        {formatCount(track.playCount)} plays
+        {track.playCount !== null
+          ? `${formatCount(track.playCount)} ${
+              track.source === "youtube" ? "views" : "plays"
+            }`
+          : ""}
       </span>
 
       {/* actions */}

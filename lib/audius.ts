@@ -2,31 +2,18 @@
  * Everything that talks to Audius lives in this one file.
  *
  * Two rules we learned by inspecting the real API response:
- *   1. Audius sends ~100 fields per track. We keep 11 and drop the rest.
+ *   1. Audius sends ~100 fields per track. We keep what we need, drop the rest.
  *   2. Some tracks have `is_streamable: false` (the artist deleted their
  *      account). Those play silence, so we filter them out.
  */
+
+import { type Track, makeTrackId } from "@/lib/track";
 
 /** Audius counts requests per app. No key, no signup — just a name. */
 export const APP_NAME = "MusicPlayerApp";
 
 /** Used if the registry lookup fails. Today the registry returns this anyway. */
 const FALLBACK_HOST = "https://api.audius.co";
-
-/** The clean shape the rest of our app uses. 11 fields instead of ~100. */
-export type Track = {
-  id: string; // "95wro" — TEXT id. Never use `track_id` (the number).
-  title: string;
-  artist: string;
-  artistHandle: string;
-  artwork: string | null; // can genuinely be missing
-  duration: number; // seconds
-  genre: string;
-  mood: string | null;
-  tags: string[];
-  playCount: number;
-  favoriteCount: number;
-};
 
 /* ------------------------------------------------------------------ *
  * Which server do we talk to?
@@ -72,22 +59,16 @@ export async function getHost(): Promise<string> {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function normalize(t: any): Track {
   return {
-    id: t.id,
+    id: makeTrackId("audius", t.id),
+    source: "audius",
+    sourceId: t.id, // "95wro" — the TEXT id, never `track_id`
     title: t.title ?? "Untitled",
     artist: t.user?.name ?? t.user?.handle ?? "Unknown artist",
-    artistHandle: t.user?.handle ?? "",
     // `artwork` is an object of sizes and may be absent entirely.
     artwork: t.artwork?.["480x480"] ?? t.artwork?.["150x150"] ?? null,
     duration: typeof t.duration === "number" ? t.duration : 0,
     genre: t.genre || "Unknown",
-    mood: t.mood || null,
-    // `tags` arrives as ONE comma-separated string, not an array.
-    tags:
-      typeof t.tags === "string" && t.tags.length > 0
-        ? t.tags.split(",").map((s: string) => s.trim()).filter(Boolean)
-        : [],
     playCount: t.play_count ?? 0,
-    favoriteCount: t.favorite_count ?? 0,
   };
 }
 
@@ -116,7 +97,7 @@ async function audiusGet(path: string, params: Record<string, string>) {
   return res.json();
 }
 
-export async function searchTracks(query: string, limit = 30): Promise<Track[]> {
+export async function searchTracks(query: string, limit = 25): Promise<Track[]> {
   if (!query.trim()) return [];
   const json = await audiusGet("/tracks/search", {
     query,
@@ -145,11 +126,11 @@ export async function getTrending(genre?: string, limit = 30): Promise<Track[]> 
  * Audius for a fresh signed link every time, so it never goes stale.
  *
  * Note this points straight at Audius, NOT through our own server.
- * Audio files are large; proxying them through Vercel would burn
- * bandwidth for no benefit.
+ * Audio files are large; proxying them would burn hosting bandwidth
+ * for no benefit.
  */
-export function streamUrl(trackId: string): string {
-  return `${FALLBACK_HOST}/v1/tracks/${trackId}/stream?app_name=${APP_NAME}`;
+export function streamUrl(audiusTrackId: string): string {
+  return `${FALLBACK_HOST}/v1/tracks/${audiusTrackId}/stream?app_name=${APP_NAME}`;
 }
 
 /** Genres Audius actually uses — for the category filter buttons. */

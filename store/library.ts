@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { Track } from "@/lib/audius";
+import type { Track } from "@/lib/track";
 import type { Playlist } from "@/lib/saves";
 import * as saves from "@/lib/saves";
 
