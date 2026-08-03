@@ -22,7 +22,7 @@ type ProfileState = {
   uploadPicture: (file: File) => Promise<void>;
   removePicture: () => Promise<void>;
   changeEmail: (email: string) => Promise<void>;
-  changePassword: (password: string) => Promise<void>;
+  changePassword: (password: string, currentPassword?: string) => Promise<void>;
 };
 
 /** Supabase's wording is for developers — translate it for visitors. */
@@ -102,10 +102,10 @@ export const useProfile = create<ProfileState>((set) => ({
     }
   },
 
-  changePassword: async (password) => {
+  changePassword: async (password, currentPassword) => {
     set({ busy: true, error: null, notice: null });
     try {
-      await api.updatePassword(password);
+      await api.updatePassword(password, currentPassword);
       set({ busy: false, notice: "Password updated." });
     } catch (e) {
       set({ busy: false, error: message(e, "Could not change your password.") });

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useProfile } from "@/store/profile";
 import { useAuth } from "@/store/auth";
-import { MAX_AVATAR_BYTES } from "@/lib/profile";
+import { MAX_AVATAR_BYTES, hasPasswordIdentity } from "@/lib/profile";
 import { isPasswordValid } from "@/lib/constants";
 import PasswordField from "@/components/PasswordField";
 import { SpinnerIcon, UserIcon } from "@/components/icons";
@@ -28,6 +28,9 @@ export default function ProfileDialog() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+
+  const hasPassword = hasPasswordIdentity(user);
 
   /* Fill the form when the dialog opens, not on every render. */
   useEffect(() => {
@@ -35,6 +38,7 @@ export default function ProfileDialog() {
       setName(profile?.displayName ?? "");
       setEmail(user?.email ?? "");
       setPassword("");
+      setCurrentPassword("");
     }
   }, [open, profile?.displayName, user?.email]);
 
@@ -182,11 +186,34 @@ export default function ProfileDialog() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            changePassword(password);
+            changePassword(password, hasPassword ? currentPassword : undefined);
             setPassword("");
+            setCurrentPassword("");
           }}
           className="mt-4"
         >
+          {/* Only asked for when there IS one. A Google-only account has
+              no password yet, so demanding it would be impossible. */}
+          {hasPassword && (
+            <div className="mb-2.5">
+              <label
+                className="text-xs text-muted"
+                htmlFor="profile-current-password"
+              >
+                Current password
+              </label>
+              <div className="mt-1.5">
+                <PasswordField
+                  id="profile-current-password"
+                  value={currentPassword}
+                  onChange={setCurrentPassword}
+                  placeholder="Your password right now"
+                  autoComplete="current-password"
+                />
+              </div>
+            </div>
+          )}
+
           <label className="text-xs text-muted" htmlFor="profile-password">
             New password
           </label>
@@ -203,15 +230,20 @@ export default function ProfileDialog() {
             </div>
             <button
               type="submit"
-              disabled={busy || !isPasswordValid(password)}
+              disabled={
+                busy ||
+                !isPasswordValid(password) ||
+                (hasPassword && !currentPassword)
+              }
               className="h-[42px] shrink-0 rounded-lg bg-surface-2 px-3 text-sm transition hover:brightness-125 disabled:opacity-40"
             >
               Set
             </button>
           </div>
           <p className="mt-1.5 text-[11px] text-muted">
-            Signed in with Google? You can add a password too, and then use
-            either way to get in.
+            {hasPassword
+              ? "Your current password is required, so nobody can take over your account from a browser you left signed in."
+              : "You signed in with Google, so you have no password yet. Adding one lets you use either way to get in."}
           </p>
         </form>
 

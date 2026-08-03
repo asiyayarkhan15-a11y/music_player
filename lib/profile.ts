@@ -131,13 +131,52 @@ export async function updateEmail(email: string): Promise<void> {
 }
 
 /**
- * Works for Google users too — it simply adds a password to the account,
- * so they can sign in either way afterwards.
+ * Change the password.
+ *
+ * ⚠️ `currentPassword` must be supplied by anyone who already has one.
+ *
+ * Without that check, being signed in would be enough to take over an
+ * account — someone who found an unattended browser could set a new
+ * password, and the real owner would be locked out. Supabase's
+ * `updateUser` does not verify the old password by itself, so we prove
+ * it by signing in with it first. If those credentials are wrong the
+ * sign-in fails and we never reach the update.
+ *
+ * People who signed up with Google have no password yet, so there is
+ * nothing to verify — they pass `undefined` and simply gain one.
  */
-export async function updatePassword(password: string): Promise<void> {
+export async function updatePassword(
+  password: string,
+  currentPassword?: string,
+): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
 
+  if (currentPassword) {
+    const { data } = await supabase.auth.getUser();
+    const email = data.user?.email;
+    if (!email) throw new Error("Not signed in.");
+
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email,
+      password: currentPassword,
+    });
+
+    if (verifyError) throw new Error("Your current password is not correct.");
+  }
+
   const { error } = await supabase.auth.updateUser({ password });
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Does this account already have a password?
+ *
+ * Supabase records one "identity" per sign-in method. A Google-only
+ * account has just `google`; adding a password adds an `email` identity.
+ */
+export function hasPasswordIdentity(user: {
+  identities?: { provider: string }[] | null;
+} | null): boolean {
+  return Boolean(user?.identities?.some((i) => i.provider === "email"));
 }
