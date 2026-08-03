@@ -152,13 +152,27 @@ export async function updatePassword(
   const supabase = getSupabase();
   if (!supabase) return;
 
-  if (currentPassword) {
-    const { data } = await supabase.auth.getUser();
-    const email = data.user?.email;
-    if (!email) throw new Error("Not signed in.");
+  /**
+   * The decision is made here, not in the form, so a mistake in the UI
+   * cannot let someone through.
+   */
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+  if (!user?.email) throw new Error("Not signed in.");
 
+  // Read from the database, not from `identities` — see the note on
+  // accountHasPassword() for why that field cannot answer this.
+  const hasPassword = await accountHasPassword();
+
+  if (hasPassword) {
+    if (!currentPassword) {
+      throw new Error("Enter your current password to change it.");
+    }
+
+    // Supabase's updateUser does not check the old password, so prove it
+    // by signing in with it. Wrong password -> this fails -> we stop here.
     const { error: verifyError } = await supabase.auth.signInWithPassword({
-      email,
+      email: user.email,
       password: currentPassword,
     });
 
@@ -175,8 +189,31 @@ export async function updatePassword(
  * Supabase records one "identity" per sign-in method. A Google-only
  * account has just `google`; adding a password adds an `email` identity.
  */
-export function hasPasswordIdentity(user: {
-  identities?: { provider: string }[] | null;
-} | null): boolean {
-  return Boolean(user?.identities?.some((i) => i.provider === "email"));
+/**
+ * Does this account already have a password?
+ *
+ * ⚠️ You cannot answer this from the user object. Setting a password on a
+ * Google account does NOT add an "email" identity — Supabase writes it
+ * onto the user record and `identities` still shows Google alone. An
+ * earlier version checked exactly that and was wrong every time.
+ *
+ * The truth is auth.users.encrypted_password, which the browser must
+ * never see, so a database trigger mirrors a plain yes/no into
+ * public.profiles. See supabase/password-flag.sql.
+ */
+export async function accountHasPassword(): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("has_password")
+    .single();
+
+  if (error) {
+    console.error("[profile] accountHasPassword", error.message);
+    return false;
+  }
+
+  return Boolean(data?.has_password);
 }

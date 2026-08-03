@@ -74,12 +74,29 @@ export const useAuth = create<AuthState>((set, get) => ({
     const supabase = getSupabase();
     if (!supabase) return;
 
+    /**
+     * The user carried on a session is decoded from the token, so it can
+     * be out of date — an email changed elsewhere, for instance.
+     * `getUser()` asks the server for the authentic record, so we follow
+     * up with it once the session is known.
+     */
+    const refreshUser = () => {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user) set({ user: data.user });
+      });
+    };
+
     supabase.auth.getSession().then(({ data }) => {
       set({ user: data.session?.user ?? null, ready: true });
+      if (data.session) refreshUser();
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       set({ user: session?.user ?? null, ready: true });
+
+      // Deliberately deferred: calling another Supabase method straight
+      // from inside this callback can deadlock the client.
+      if (session) setTimeout(refreshUser, 0);
 
       if (event === "SIGNED_IN") {
         set({ dialogOpen: false, error: null, notice: null, busy: false });

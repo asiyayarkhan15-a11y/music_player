@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useProfile } from "@/store/profile";
 import { useAuth } from "@/store/auth";
-import { MAX_AVATAR_BYTES, hasPasswordIdentity } from "@/lib/profile";
+import { MAX_AVATAR_BYTES, accountHasPassword } from "@/lib/profile";
 import { isPasswordValid } from "@/lib/constants";
 import PasswordField from "@/components/PasswordField";
 import { SpinnerIcon, UserIcon } from "@/components/icons";
@@ -29,8 +29,10 @@ export default function ProfileDialog() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
-
-  const hasPassword = hasPasswordIdentity(user);
+  /** null = still asking the server. Nothing is guessed while it is null. */
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  /** Problems we can spot without asking the server. */
+  const [formError, setFormError] = useState<string | null>(null);
 
   /* Fill the form when the dialog opens, not on every render. */
   useEffect(() => {
@@ -41,6 +43,22 @@ export default function ProfileDialog() {
       setCurrentPassword("");
     }
   }, [open, profile?.displayName, user?.email]);
+
+  /* Ask the server whether this account has a password, each time the
+     dialog opens — it changes the moment someone sets their first one. */
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    setHasPassword(null);
+    accountHasPassword().then((value) => {
+      if (!cancelled) setHasPassword(value);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -184,17 +202,37 @@ export default function ProfileDialog() {
 
         {/* ---------------- password ---------------- */}
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            changePassword(password, hasPassword ? currentPassword : undefined);
+            setFormError(null);
+
+            if (!isPasswordValid(password)) {
+              setFormError("Your new password does not meet all the rules below.");
+              return;
+            }
+            if (hasPassword === true && !currentPassword) {
+              setFormError("Enter your current password to change it.");
+              return;
+            }
+
+            // Always hand over whatever was typed. lib/profile.ts asks the
+            // server whether it is actually required — that decision must
+            // not depend on this form being right.
+            await changePassword(password, currentPassword || undefined);
             setPassword("");
             setCurrentPassword("");
+
+            /* Setting a first password turns a Google-only account into one
+               that HAS a password, so the "Current password" box must now
+               appear. Without this re-check it only showed up after closing
+               and reopening the dialog. */
+            setHasPassword(await accountHasPassword());
           }}
           className="mt-4"
         >
           {/* Only asked for when there IS one. A Google-only account has
               no password yet, so demanding it would be impossible. */}
-          {hasPassword && (
+          {hasPassword === true && (
             <div className="mb-2.5">
               <label
                 className="text-xs text-muted"
@@ -230,30 +268,32 @@ export default function ProfileDialog() {
             </div>
             <button
               type="submit"
-              disabled={
-                busy ||
-                !isPasswordValid(password) ||
-                (hasPassword && !currentPassword)
-              }
+              // Clickable as soon as something is typed. A greyed-out
+              // button that will not say why is worse than an error.
+              disabled={busy || !password}
               className="h-[42px] shrink-0 rounded-lg bg-surface-2 px-3 text-sm transition hover:brightness-125 disabled:opacity-40"
             >
               Set
             </button>
           </div>
           <p className="mt-1.5 text-[11px] text-muted">
-            {hasPassword
+            {hasPassword === true
               ? "Your current password is required, so nobody can take over your account from a browser you left signed in."
-              : "You signed in with Google, so you have no password yet. Adding one lets you use either way to get in."}
+              : hasPassword === false
+                ? "You signed in with Google, so you have no password yet. Adding one lets you sign in either way."
+                : "Checking your account…"}
           </p>
         </form>
 
         {/* ---------------- feedback ---------------- */}
-        {(error || notice) && (
+        {(formError || error || notice) && (
           <p
-            className={`mt-4 text-xs ${error ? "text-red-300" : "text-accent"}`}
+            className={`mt-4 text-xs ${
+              formError || error ? "text-red-300" : "text-accent"
+            }`}
             role="status"
           >
-            {error ?? notice}
+            {formError ?? error ?? notice}
           </p>
         )}
 
