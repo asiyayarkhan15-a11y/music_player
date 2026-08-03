@@ -101,6 +101,7 @@ export default function PlayerBar() {
   const isLoading = usePlayer((s) => s.isLoading);
   const shuffle = usePlayer((s) => s.shuffle);
   const repeat = usePlayer((s) => s.repeat);
+  const queuePlaylistId = usePlayer((s) => s.queuePlaylistId);
 
   const togglePlay = usePlayer((s) => s.togglePlay);
   const next = usePlayer((s) => s.next);
@@ -155,8 +156,14 @@ export default function PlayerBar() {
                 <HeartIcon filled={favorited} className="size-4" />
               </button>
 
+              {/* "⋯" rather than "+", because this menu now removes
+                  as well as adds. */}
               <PlaylistMenu
                 track={track}
+                currentPlaylistId={queuePlaylistId ?? undefined}
+                showQueueRemove
+                trigger="⋯"
+                title="More options"
                 className="rounded px-2 py-0.5 text-lg leading-none text-muted transition hover:text-fg"
               />
             </div>

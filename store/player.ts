@@ -16,6 +16,12 @@ type PlayerState = {
   order: number[];
   /** Where we are inside `order` (NOT inside `queue`). */
   pos: number;
+  /**
+   * The playlist this queue was started from, if any. Lets the player bar
+   * offer "remove from this playlist" for whatever is currently playing,
+   * without the user having to navigate back to that playlist first.
+   */
+  queuePlaylistId: string | null;
 
   isPlaying: boolean;
   isLoading: boolean;
@@ -29,7 +35,13 @@ type PlayerState = {
   shuffle: boolean;
   repeat: RepeatMode;
 
-  playQueue: (tracks: Track[], startIndex: number) => void;
+  playQueue: (
+    tracks: Track[],
+    startIndex: number,
+    playlistId?: string,
+  ) => void;
+  /** Take a track out of what is playing. Does not touch saved data. */
+  removeFromQueue: (trackId: string) => void;
   togglePlay: () => void;
   next: (auto?: boolean) => void;
   previous: () => void;
@@ -82,6 +94,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   queue: [],
   order: [],
   pos: 0,
+  queuePlaylistId: null,
   isPlaying: false,
   isLoading: false,
   currentTime: 0,
@@ -92,7 +105,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   shuffle: false,
   repeat: "off",
 
-  playQueue: (tracks, startIndex) => {
+  playQueue: (tracks, startIndex, playlistId) => {
     if (tracks.length === 0) return;
     const { shuffle } = get();
     const { order, pos } = buildOrder(tracks.length, shuffle, startIndex);
@@ -101,12 +114,72 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       queue: tracks,
       order,
       pos,
+      queuePlaylistId: playlistId ?? null,
       isPlaying: true,
       currentTime: 0,
       duration: tracks[order[pos]]?.duration ?? 0,
       lastError: null,
     });
     load(tracks[order[pos]], true);
+  },
+
+  /**
+   * Drop one track out of the queue.
+   *
+   * `order` holds positions into `queue`, so removing a queue entry shifts
+   * every later index down by one — the map below repairs them. Getting
+   * this wrong is how a "remove" button ends up playing the wrong song.
+   */
+  removeFromQueue: (trackId) => {
+    const { queue, order, pos } = get();
+
+    const removedIndex = queue.findIndex((t) => t.id === trackId);
+    if (removedIndex === -1) return;
+
+    const removedOrderPos = order.indexOf(removedIndex);
+    const wasCurrent = removedOrderPos === pos;
+
+    const newQueue = queue.filter((_, i) => i !== removedIndex);
+
+    if (newQueue.length === 0) {
+      getEngine("audius").stop();
+      getEngine("youtube").stop();
+      set({
+        queue: [],
+        order: [],
+        pos: 0,
+        queuePlaylistId: null,
+        isPlaying: false,
+        currentTime: 0,
+        duration: 0,
+      });
+      return;
+    }
+
+    const newOrder = order
+      .filter((i) => i !== removedIndex)
+      .map((i) => (i > removedIndex ? i - 1 : i));
+
+    // Removing something earlier in the running order shifts us back one.
+    let newPos = removedOrderPos < pos ? pos - 1 : pos;
+    if (newPos > newOrder.length - 1) newPos = 0;
+
+    const nextTrack = newQueue[newOrder[newPos]];
+
+    set({
+      queue: newQueue,
+      order: newOrder,
+      pos: newPos,
+      currentTime: 0,
+      duration: wasCurrent ? (nextTrack?.duration ?? 0) : get().duration,
+    });
+
+    // Only reload the player if we removed the song being played —
+    // otherwise the music should carry on untouched.
+    if (wasCurrent) {
+      set({ isPlaying: true, lastError: null });
+      load(nextTrack, true);
+    }
   },
 
   togglePlay: () => {

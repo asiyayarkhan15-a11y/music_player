@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import type { Track } from "@/lib/track";
 import { useLibrary } from "@/store/library";
+import { usePlayer } from "@/store/player";
 
 const MENU_WIDTH = 224; // px — matches w-56
 const MENU_MAX_HEIGHT = 300;
@@ -17,6 +18,10 @@ type Props = {
   /** Extra classes for the trigger button. */
   className?: string;
   title?: string;
+  /** What the button shows. Defaults to "+". */
+  trigger?: React.ReactNode;
+  /** Offer "Remove from queue" — used by the player bar. */
+  showQueueRemove?: boolean;
 };
 
 /**
@@ -40,6 +45,8 @@ export default function PlaylistMenu({
   currentPlaylistId,
   className = "",
   title = "Add to playlist",
+  trigger = "+",
+  showQueueRemove = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -50,6 +57,7 @@ export default function PlaylistMenu({
   const addToPlaylist = useLibrary((s) => s.addToPlaylist);
   const removeFromPlaylist = useLibrary((s) => s.removeFromPlaylist);
   const createPlaylist = useLibrary((s) => s.createPlaylist);
+  const removeFromQueue = usePlayer((s) => s.removeFromQueue);
 
   /* Portals need a real document, which does not exist during SSR. */
   useEffect(() => setMounted(true), []);
@@ -171,17 +179,40 @@ export default function PlaylistMenu({
           + New playlist
         </button>
 
-        {currentPlaylistId && (
-          <button
-            onClick={async () => {
-              setOpen(false);
-              await removeFromPlaylist(currentPlaylistId, track.id);
-            }}
-            className="mt-1 block w-full rounded border-t border-line px-2 py-1.5 text-left text-sm text-red-300 transition hover:bg-surface-2"
-            role="menuitem"
-          >
-            Remove from this playlist
-          </button>
+        {(showQueueRemove || currentPlaylistId) && (
+          <div className="mt-1 border-t border-line pt-1">
+            {showQueueRemove && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  removeFromQueue(track.id);
+                }}
+                className="block w-full rounded px-2 py-1.5 text-left text-sm transition hover:bg-surface-2"
+                role="menuitem"
+              >
+                Remove from queue
+                <span className="block text-[11px] text-muted">
+                  Skips it now, keeps it saved
+                </span>
+              </button>
+            )}
+
+            {currentPlaylistId && (
+              <button
+                onClick={async () => {
+                  setOpen(false);
+                  await removeFromPlaylist(currentPlaylistId, track.id);
+                }}
+                className="block w-full rounded px-2 py-1.5 text-left text-sm text-red-300 transition hover:bg-surface-2"
+                role="menuitem"
+              >
+                Remove from this playlist
+                <span className="block text-[11px] text-muted">
+                  Deletes it from the playlist
+                </span>
+              </button>
+            )}
+          </div>
         )}
       </div>
     </>
@@ -198,7 +229,7 @@ export default function PlaylistMenu({
         aria-expanded={open}
         title={title}
       >
-        +
+        {trigger}
       </button>
 
       {/* Rendered at the end of <body>, outside every ancestor. */}

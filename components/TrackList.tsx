@@ -48,7 +48,9 @@ export default function TrackList({
               if (isCurrent) togglePlay();
               // The WHOLE list becomes the queue, starting at this song.
               // That is what makes "next" work through the rest of the list.
-              else playQueue(tracks, index);
+              // Passing the playlist id lets the player bar offer to
+              // remove the playing song from it later.
+              else playQueue(tracks, index, playlistId);
             }}
           />
         );
