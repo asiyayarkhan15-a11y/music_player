@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useProfile } from "@/store/profile";
 import { useAuth } from "@/store/auth";
 import { MAX_AVATAR_BYTES } from "@/lib/profile";
+import { isPasswordValid } from "@/lib/constants";
+import PasswordField from "@/components/PasswordField";
 import { SpinnerIcon, UserIcon } from "@/components/icons";
 
 export default function ProfileDialog() {
@@ -189,26 +191,27 @@ export default function ProfileDialog() {
             New password
           </label>
           <div className="mt-1.5 flex gap-2">
-            <input
-              id="profile-password"
-              type="password"
-              value={password}
-              minLength={6}
-              autoComplete="new-password"
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
-              className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none transition placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25"
-            />
+            <div className="min-w-0 flex-1">
+              <PasswordField
+                id="profile-password"
+                value={password}
+                onChange={setPassword}
+                placeholder="New password"
+                autoComplete="new-password"
+                showRules
+              />
+            </div>
             <button
               type="submit"
-              disabled={busy || password.length < 6}
-              className="shrink-0 rounded-lg bg-surface-2 px-3 text-sm transition hover:brightness-125 disabled:opacity-40"
+              disabled={busy || !isPasswordValid(password)}
+              className="h-[42px] shrink-0 rounded-lg bg-surface-2 px-3 text-sm transition hover:brightness-125 disabled:opacity-40"
             >
               Set
             </button>
           </div>
           <p className="mt-1.5 text-[11px] text-muted">
-            Signed in with Google? Setting a password lets you use either way.
+            Signed in with Google? You can add a password too, and then use
+            either way to get in.
           </p>
         </form>
 

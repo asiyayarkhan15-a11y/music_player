@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { MIN_PASSWORD_LENGTH } from "@/lib/constants";
 
 export type AuthMode = "signin" | "signup";
 
@@ -33,7 +34,7 @@ type AuthState = {
  * Supabase's error strings are written for developers. Turn the common
  * ones into something a visitor can act on.
  */
-function friendly(message: string): string {
+export function friendly(message: string): string {
   const m = message.toLowerCase();
   if (m.includes("invalid login credentials"))
     return "Wrong email or password.";
@@ -42,7 +43,9 @@ function friendly(message: string): string {
   if (m.includes("already registered") || m.includes("already been registered"))
     return "That email already has an account. Try signing in instead.";
   if (m.includes("password should be at least"))
-    return "Password must be at least 6 characters.";
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  if (m.includes("should contain at least one character of each"))
+    return "Password needs a lowercase letter, an uppercase letter, a number and a symbol.";
   if (m.includes("unable to validate email") || m.includes("invalid email"))
     return "That email address does not look right.";
   if (m.includes("rate limit") || m.includes("too many"))

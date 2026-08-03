@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import * as api from "@/lib/profile";
 import type { Profile } from "@/lib/profile";
+import { friendly } from "@/store/auth";
 
 type ProfileState = {
   profile: Profile | null;
@@ -24,8 +25,9 @@ type ProfileState = {
   changePassword: (password: string) => Promise<void>;
 };
 
+/** Supabase's wording is for developers — translate it for visitors. */
 function message(e: unknown, fallback: string) {
-  return e instanceof Error && e.message ? e.message : fallback;
+  return e instanceof Error && e.message ? friendly(e.message) : fallback;
 }
 
 export const useProfile = create<ProfileState>((set) => ({

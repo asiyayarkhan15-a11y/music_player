@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useAuth } from "@/store/auth";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { isPasswordValid } from "@/lib/constants";
+import PasswordField from "@/components/PasswordField";
 import { SpinnerIcon, GoogleIcon } from "@/components/icons";
 
 /**
@@ -26,6 +28,8 @@ export default function AuthDialog() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  /** Problems we can spot ourselves, before bothering the server. */
+  const [formError, setFormError] = useState<string | null>(null);
 
   if (!open) return null;
 
@@ -33,7 +37,17 @@ export default function AuthDialog() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
+
     if (!email.trim() || !password) return;
+
+    // Only enforced when creating a password. Someone with an older,
+    // simpler password must still be able to sign in with it.
+    if (signingUp && !isPasswordValid(password)) {
+      setFormError("Your password does not meet all the rules below.");
+      return;
+    }
+
     if (signingUp) signUpWithPassword(email, password);
     else signInWithPassword(email, password);
   }
@@ -110,25 +124,25 @@ export default function AuthDialog() {
                 className="w-full rounded-lg border border-line bg-bg px-3 py-2.5 text-sm outline-none transition placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25"
               />
 
-              <input
-                type="password"
-                required
-                minLength={6}
-                autoComplete={signingUp ? "new-password" : "current-password"}
+              <PasswordField
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={
-                  signingUp ? "Choose a password (6+ characters)" : "Password"
-                }
-                className="w-full rounded-lg border border-line bg-bg px-3 py-2.5 text-sm outline-none transition placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25"
+                onChange={(v) => {
+                  setPassword(v);
+                  setFormError(null);
+                }}
+                placeholder={signingUp ? "Choose a password" : "Password"}
+                autoComplete={signingUp ? "new-password" : "current-password"}
+                showRules={signingUp}
               />
 
-              {error && <p className="text-xs text-red-300">{error}</p>}
+              {(formError || error) && (
+                <p className="text-xs text-red-300">{formError ?? error}</p>
+              )}
               {notice && <p className="text-xs text-accent">{notice}</p>}
 
               <button
                 type="submit"
-                disabled={busy || !email.trim() || password.length < 6}
+                disabled={busy || !email.trim() || !password}
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent-strong py-2.5 text-sm font-medium text-bg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy && <SpinnerIcon className="size-4" />}
